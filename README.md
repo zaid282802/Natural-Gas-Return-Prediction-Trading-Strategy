@@ -1,5 +1,7 @@
 # Natural Gas Return Prediction & Trading Strategy
 
+**September 2025 -- October 2025** | Zaid Annigeri | Master of Quantitative Finance, Rutgers Business School
+
 > Quantitative trading strategy using fundamental factors to predict monthly natural gas returns, achieving 54% improvement over time series models (SSR metric).
 
 ##  Project Overview

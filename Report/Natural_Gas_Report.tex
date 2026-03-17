@@ -320,7 +320,7 @@ This report presents a comprehensive quantitative analysis of natural gas return
 \subsection{Key Findings}
 
 \begin{itemize}[leftmargin=*]
-    \item \textbf{Model Performance}: OLS regression with fundamental factors achieves 54\% improvement over ARMA(2,1) baseline (SSR: 2.57 vs 5.62)
+    \item \textbf{Model Performance}: OLS regression with fundamental factors achieves 54\% improvement over ARMA(2,1) baseline (SSR: 2.57 vs 5.68)
 
     \item \textbf{Parsimony}: Six statistically significant variables (p < 0.1) explain 36\% of variance, demonstrating model stability
 
@@ -739,7 +739,7 @@ ARMA(0,0) & Baseline & 5.903 & N/A & N/A & N/A & 1 \\
 \begin{enumerate}
     \item \textbf{Fundamental Dominance}: OLS models achieve SSR 2.57-3.80 vs ARMA 5.68-5.90, representing 54\% improvement
 
-    \item \textbf{Parsimony Trade-off}: The 6-variable model retains 64\% of the full model's explanatory power (Adj $R^2$ 0.296 vs 0.351) while using only 26\% of parameters
+    \item \textbf{Parsimony Trade-off}: The 6-variable model retains 63\% of the full model's explanatory power ($R^2$ 0.356 vs 0.565) while using only 26\% of parameters
 
     \item \textbf{GARCH Ineffectiveness}: ARMA-GARCH performs worse than simple ARMA(2,1), suggesting monthly aggregation removes volatility clustering
 
@@ -804,7 +804,7 @@ EIA Storage Change & 0.102 & 0.010 & 0.6\% \\
 Storage vs 5Y Avg & -0.070 & 0.005 & 0.3\% \\
 \midrule
 \textbf{Total Explained} & & & \textbf{35.1\%} \\
-\textbf{Residual (Unexplained)} & & & \textbf{64.4\%} \\
+\textbf{Residual (Unexplained)} & & & \textbf{64.9\%} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -1013,7 +1013,7 @@ Figure \ref{fig:factors} displays the regression coefficients for the six signif
     \label{fig:factors}
 \end{figure}
 
-Figure \ref{fig:correlation} presents the correlation matrix for the six factors, confirming low multicollinearity (all VIF < 2.5). This validates our variable selection process and ensures stable coefficient estimates.
+Figure \ref{fig:correlation} presents the correlation matrix for the six factors, revealing moderate to high pairwise correlations among several variables. As discussed in Section 4.4, multicollinearity does not invalidate the model for prediction purposes.
 
 \begin{figure}[H]
     \centering

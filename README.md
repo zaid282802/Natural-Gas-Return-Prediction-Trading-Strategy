@@ -6,14 +6,14 @@
 
 ##  Project Overview
 
-This project compares **fundamental factor analysis** (OLS regression) versus **time series models** (ARMA/GARCH) for predicting natural gas returns. The research demonstrates that fundamental factors significantly outperform pure technical analysis at monthly frequency.
+Comparison of **fundamental factor analysis** (OLS regression) versus **time series models** (ARMA/GARCH) for predicting natural gas returns. Fundamental factors outperform pure time series approaches at monthly frequency.
 
 ### Key Findings
 
 - **Fundamental factors outperform time series by 54%** (SSR: 2.57 vs 5.62)
 - **6 significant variables** explain 36% of variance (parsimonious model)
 - **Walk-forward backtest**: Sharpe Ratio 1.07, Win Rate 63%
-- **Industry-standard methodology**: Expanding window, no look-ahead bias
+- **Expanding window backtest**: No look-ahead bias
 
 ---
 
@@ -28,32 +28,32 @@ python create_visualizations.py
 
 **Output**:
 - `run_analysis_clean.py`: Displays model comparison, walk-forward backtest results, and performance metrics in terminal
-- `create_visualizations.py`: Generates 6 publication-quality charts saved to `results/charts/`
+- `create_visualizations.py`: Generates 6 charts saved to `results/charts/`
 
 **Data**: Project uses `data/Book1.1.xlsx` (71 monthly observations, Jan 2020 - Nov 2025)
 
 ### Project Structure
 ```
 natural-gas-trading-strategy/
-├── run_analysis_clean.py          # Main analysis script
-├── create_visualizations.py       # Generate 6 portfolio charts 
+├── run_analysis_clean.py          # Main analysis script (57 lines)
+├── create_visualizations.py       # Generate 6 portfolio charts (330 lines)
 ├── data/
 │   └── Book1.1.xlsx               # Monthly natural gas data (2020-2025)
 ├── src/
-│   ├── utils.py                   # Data loading utilities
-│   ├── models.py                  # OLS, ARMA, GARCH, Random Forest
-│   ├── backtest.py                # Walk-forward backtesting engine
-│   └── risk_metrics.py            # Sharpe, Sortino, drawdown calculations
+│   ├── utils.py                   # Data loading utilities (105 lines)
+│   ├── models.py                  # OLS, ARMA, GARCH, Random Forest (365 lines)
+│   ├── backtest.py                # Walk-forward backtesting engine (190 lines)
+│   └── risk_metrics.py            # Sharpe, Sortino, drawdown calculations (197 lines)
 ├── results/
 │   └── charts/                    # Generated visualizations
 └── Report/
-    └── Natural_Gas_Report.tex     # Comprehensive LaTeX report 
+    └── Natural_Gas_Report.tex     # LaTeX report
 ```
 ---
 
 ##  Portfolio Visualizations
 
-**NEW**: 6 publication-quality charts demonstrating strategy performance and model characteristics:
+6 charts showing strategy performance and model characteristics:
 
 | Chart | Description | Key Insight |
 |-------|-------------|-------------|
@@ -84,7 +84,7 @@ natural-gas-trading-strategy/
 | Metric | Value | Interpretation |
 |--------|-------|----------------|
 | **Sharpe Ratio** | 1.07 | Good risk-adjusted returns |
-| **Sortino Ratio** | 1.69 | Strong downside risk management |
+| **Sortino Ratio** | 1.69 | Favorable downside risk ratio |
 | **Win Rate** | 63% | Directionally accurate |
 | **Max Drawdown** | -59% | Large (2020-2022 volatility) |
 | **Number of Trades** | 10 | Low turnover strategy |
@@ -93,10 +93,12 @@ natural-gas-trading-strategy/
 
 ---
 
-##  Significant Factors (p < 0.1)
+##  Significant Factors
 
-| Factor | Coefficient | p-value | Economic Rationale |
-|--------|-------------|---------|-------------------|
+The 6 factors used in the parsimonious OLS model. Note: p-values below are from the LaTeX report analysis (statsmodels OLS with Newey-West standard errors). The Python codebase uses `sklearn.linear_model.LinearRegression`, which does not produce p-values.
+
+| Factor | Coefficient | p-value (report) | Economic Rationale |
+|--------|-------------|-------------------|-------------------|
 | **Henry Hub Spot Price** | +0.164 | <0.001 | Mean reversion signal |
 | **Coal Price Index** | -0.300 | 0.018 | Substitution effect (negative correlation) |
 | **Net Trade Balance** | -0.112 | <0.001 | LNG exports reduce domestic supply |
@@ -118,7 +120,7 @@ High coal prices → Utilities switch to natural gas → Increased NG demand →
 - **Out-of-Sample Testing**: Monthly predictions (35 periods)
 - **No Look-Ahead Bias**: Only past data used for each prediction
 - **Signal Generation**: Long if predicted return > +2%, Short if < -2%
-- **Transaction Costs**: 10 basis points per round-trip
+- **Transaction Costs**: Not applied (gross returns only)
 
 ### Model Selection Process
 
@@ -174,10 +176,10 @@ At **monthly frequency**, natural gas returns are driven by:
 
 ### LaTeX Report
 
-A full academic report (`Report/Natural_Gas_Report.tex`) is included covering:
+An academic report (`Report/Natural_Gas_Report.tex`) is included covering:
 - **Optional 1-Page Visual Summary** (`One_Page_Summary.tex`) - Infographic-style overview with key metrics
 - Literature review (Geman 2005, Bollerslev 1986, Nick & Thoenes 2014)
-- Complete methodology with mathematical derivations
+- Methodology with mathematical derivations
 - **Feature Engineering Rationale** (5-part detailed explanation of factor selection)
 - **Training Window Selection** (sensitivity analysis: 24 vs 36 vs 48 months)
 - Empirical results with tables **and 6 integrated figures**
@@ -191,10 +193,10 @@ A full academic report (`Report/Natural_Gas_Report.tex`) is included covering:
 
 ### Visualization Documentation
 
-The `create_visualizations.py` script generates 6 portfolio-ready charts:
+The `create_visualizations.py` script generates 6 charts:
 - Automatic path handling (runs from any directory)
-- Professional styling (seaborn-v0_8-darkgrid)
-- High resolution (300 DPI for publications)
+- Seaborn styling (seaborn-v0_8-darkgrid)
+- 300 DPI output
 - Event annotations (COVID-19 crash, Ukraine war)
 - Runtime: ~10-15 seconds
 

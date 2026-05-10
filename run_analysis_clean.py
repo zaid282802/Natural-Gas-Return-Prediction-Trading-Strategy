@@ -1,6 +1,14 @@
-#Natural Gas Trading Strategy - Analysis Script 
-#Outputs: Metrics only, no explanations/recommendations
-#For interpretation: See README.md and Natural_Gas_Report.pdf
+"""Natural Gas Return Prediction - Main Analysis Script.
+
+Runs the full analysis pipeline: data loading, model comparison,
+walk-forward backtesting, and performance reporting.
+
+Outputs: Metrics only, no explanations/recommendations.
+For interpretation: See README.md and Natural_Gas_Report.pdf
+
+Usage:
+    python run_analysis_clean.py
+"""
 
 import sys
 import os
@@ -12,14 +20,18 @@ from src.utils import load_data_from_r
 from src.models import compare_all_models, SignificantOLSModel
 from src.backtest import WalkForwardBacktest
 
+# Configuration
+DATA_PATH = 'data/Book1.1.xlsx'
+TRAIN_WINDOW = 36                         # 3-year expanding training window
 
-def main(): # Main analysis function.
-    
+
+def main():
+    """Run full analysis: model comparison and walk-forward backtest."""
     # Header
     print("NATURAL GAS TRADING STRATEGY - ANALYSIS RESULTS")
 
     # Load data
-    data = load_data_from_r('data/Book1.1.xlsx')
+    data = load_data_from_r(DATA_PATH)
     print(f"    Loaded: {len(data)} observations")
     print(f"    Period: {data.index[0].strftime('%Y-%m')} to {data.index[-1].strftime('%Y-%m')}")
 
@@ -29,7 +41,7 @@ def main(): # Main analysis function.
 
     # Walk-Forward Backtest
     model = SignificantOLSModel()
-    backtest = WalkForwardBacktest(model, data, train_window=36, expanding=True)
+    backtest = WalkForwardBacktest(model, data, train_window=TRAIN_WINDOW, expanding=True)
     results = backtest.run()
 
     # Print performance

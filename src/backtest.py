@@ -1,149 +1,163 @@
-# Walk-forward backtesting engine with no look-ahead bias.
+"""Natural Gas Return Prediction - Walk-Forward Backtesting Engine.
+
+Implements expanding-window walk-forward testing to avoid look-ahead bias.
+
+Methodology:
+    Walk-forward analysis: Aronson (2006) "Evidence-Based Technical Analysis"
+    Expanding window: 36-month minimum training, monthly out-of-sample steps
+    Signal generation: Long if predicted return > +2%, Short if < -2%
+"""
+
 import pandas as pd
 import numpy as np
 from typing import Dict, Tuple
 import warnings
 warnings.filterwarnings('ignore')
 
+# Configuration
+TRAIN_WINDOW_MONTHS = 36                  # Minimum training window (3 years)
+MIN_TRAIN_WINDOW = 24                     # Absolute minimum training months
+SIGNAL_THRESHOLD_PCT = 0.02               # +/- 2% threshold for long/short signals
+ANNUALIZATION_FACTOR = 12                 # Monthly to annual conversion
+VAR_CONFIDENCE = 0.95                     # VaR confidence level
+CALMAR_DRAWDOWN_FLOOR = 0.0001           # Minimum drawdown to avoid division by zero
+CALMAR_CAP = 1000                         # Cap Calmar ratio for display purposes
+PROGRESS_INTERVAL = 10                    # Print progress every N periods
+
+
 class WalkForwardBacktest:
-    def __init__(self, model, data, train_window=36, expanding=True): #used expanding window because natural gas fundamentals are relatively stable
+    """Expanding-window walk-forward backtest with no look-ahead bias."""
+
+    def __init__(self, model, data, train_window=TRAIN_WINDOW_MONTHS, expanding=True):
+        assert train_window >= MIN_TRAIN_WINDOW, \
+            f"Training window must be at least {MIN_TRAIN_WINDOW} months"
         self.model = model
         self.data = data
         self.train_window = train_window
         self.expanding = expanding
-        
+
     def run(self):
+        """Execute expanding-window walk-forward backtest."""
         predictions = []
         actuals = []
         dates = []
-        
+
         total_periods = len(self.data)
-        
+
         print("WALK-FORWARD BACKTEST - OUT-OF-SAMPLE EVALUATION")
         print(f"Total observations: {total_periods}")
         print(f"Training window: {self.train_window} months")
         print(f"Out-of-sample periods: {total_periods - self.train_window}")
         print(f"Window type: {'Expanding' if self.expanding else 'Rolling'}")
-        
-        # Walk-forward loop
+
+        # Walk-forward loop: Aronson (2006) expanding-window methodology
         for i in range(self.train_window, total_periods):
             # Define training window
             if self.expanding:
-                # Use all past data
                 train_start = 0
                 train_end = i
             else:
-                # Use fixed 36-month window
                 train_start = i - self.train_window
                 train_end = i
-            
-            # Split data
+
+            # Split data - strictly no future information
             train_data = self.data.iloc[train_start:train_end]
             test_data = self.data.iloc[i:i+1]
-            
+
             # Fit model on training data only
             self.model.fit(train_data)
-            
-            # Predict next period (no look-ahead!)
+
+            # Predict next period (no look-ahead)
             pred = self.model.predict(test_data)[0]
             actual = test_data['NG_Return'].values[0]
             date = test_data.index[0]
-            
-            # Store results
+
             predictions.append(pred)
             actuals.append(actual)
             dates.append(date)
-            
+
             # Progress indicator
-            if (i - self.train_window + 1) % 10 == 0:
+            if (i - self.train_window + 1) % PROGRESS_INTERVAL == 0:
                 periods_done = i - self.train_window + 1
                 print(f"  Processed {periods_done}/{total_periods - self.train_window} periods...")
-        
-        # Create results DataFrame
+
+        # Assemble results
         results = pd.DataFrame({
             'Date': dates,
             'Predicted_Return': predictions,
             'Actual_Return': actuals
         })
-        
-        # Generate trading signals
-        results['Signal'] = self.generate_signals(results['Predicted_Return'])
-        
-        # Calculate strategy returns
+
+        results['Signal'] = self._generate_signals(results['Predicted_Return'])
         results['Strategy_Return'] = results['Signal'] * results['Actual_Return']
-        
-        # Buy-and-hold benchmark
         results['BuyHold_Return'] = results['Actual_Return']
-        
-        # Calculate cumulative returns
         results['Strategy_Cumulative'] = (1 + results['Strategy_Return']).cumprod()
         results['BuyHold_Cumulative'] = (1 + results['BuyHold_Return']).cumprod()
-        
+
         self.results = results
-        
+
         print("\nSUCCESS: Backtest complete!")
-        
+
         return results
-    
-    #Convert predictions to trading signals.
-    def generate_signals(self, predictions, threshold=0.02): #2% THRESHOLD FOR NATURAL GAS Buy/SELL SIGNALS
-        
+
+    def _generate_signals(self, predictions, threshold=SIGNAL_THRESHOLD_PCT):
+        """Convert predicted returns to trading signals (+1 Long, -1 Short, 0 Flat)."""
         signals = np.zeros(len(predictions))
-        signals[predictions > threshold] = 1   # Long
+        signals[predictions > threshold] = 1    # Long
         signals[predictions < -threshold] = -1  # Short
         return signals
-    
+
     def calculate_metrics(self):
+        """Calculate full suite of performance and risk metrics."""
         results = self.results
         strat_returns = results['Strategy_Return']
-        
+
         # Cumulative return
         cumulative = results['Strategy_Cumulative'].iloc[-1] - 1
-        
+
         # Annualized return (monthly data)
         n_months = len(strat_returns)
-        annualized = (1 + cumulative) ** (12 / n_months) - 1
-        
-        # Sharpe ratio
-        sharpe = strat_returns.mean() / strat_returns.std() * np.sqrt(12)
-        
-        # Sortino ratio
+        annualized = (1 + cumulative) ** (ANNUALIZATION_FACTOR / n_months) - 1
+
+        # Sharpe (1994): SR = mean(R) / std(R) * sqrt(12)
+        sharpe = strat_returns.mean() / strat_returns.std() * np.sqrt(ANNUALIZATION_FACTOR)
+
+        # Sortino & Price (1994): uses downside deviation only
         downside_returns = strat_returns[strat_returns < 0]
-        sortino = strat_returns.mean() / downside_returns.std() * np.sqrt(12)
-        
-        # Max drawdown
+        sortino = strat_returns.mean() / downside_returns.std() * np.sqrt(ANNUALIZATION_FACTOR)
+
+        # Max drawdown: peak-to-trough
         cumulative_series = results['Strategy_Cumulative']
         running_max = cumulative_series.expanding().max()
         drawdown_series = (cumulative_series - running_max) / running_max
         max_drawdown = drawdown_series.min()
 
         # Calmar ratio (handle zero or near-zero drawdown)
-        if abs(max_drawdown) < 0.0001:  # Less than 0.01% drawdown
-            calmar = 0  # Display as 0 instead of inf
+        if abs(max_drawdown) < CALMAR_DRAWDOWN_FLOOR:
+            calmar = 0
         else:
             calmar = annualized / abs(max_drawdown)
-            # Cap at reasonable maximum to avoid display issues
-            calmar = min(calmar, 1000)
-        
+            calmar = min(calmar, CALMAR_CAP)
+
         # Win rate
         win_rate = (strat_returns > 0).sum() / len(strat_returns)
-        
+
         # Number of trades (signal changes)
         n_trades = results['Signal'].diff().abs().sum()
-        
-        # VaR and CVaR
-        var_95 = np.percentile(strat_returns, 5)
+
+        # VaR and CVaR at 95% confidence
+        var_95 = np.percentile(strat_returns, (1 - VAR_CONFIDENCE) * 100)
         cvar_95 = strat_returns[strat_returns <= var_95].mean()
-        
+
         # Average win/loss
         wins = strat_returns[strat_returns > 0]
         losses = strat_returns[strat_returns < 0]
         avg_win = wins.mean() if len(wins) > 0 else 0
         avg_loss = losses.mean() if len(losses) > 0 else 0
-        
+
         # Benchmark comparison
         bh_cumulative = results['BuyHold_Cumulative'].iloc[-1] - 1
-        
+
         metrics = {
             'Total Return': f"{cumulative*100:.2f}%",
             'Annualized Return': f"{annualized*100:.2f}%",
@@ -159,9 +173,9 @@ class WalkForwardBacktest:
             'Avg Loss': f"{avg_loss*100:.2f}%",
             'Buy & Hold Return': f"{bh_cumulative*100:.2f}%"
         }
-        
+
         return metrics
-    
+
     def print_performance(self):
         """Print formatted performance summary."""
         metrics = self.calculate_metrics()

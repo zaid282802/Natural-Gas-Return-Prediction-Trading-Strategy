@@ -1,3 +1,18 @@
+"""Natural Gas Return Prediction - Model Implementations.
+
+Implements OLS regression, ARMA, GARCH, and Random Forest models
+for monthly natural gas return prediction.
+
+Methodology:
+    OLS with fundamental factors: Geman (2005) "Commodity Price Dynamics"
+    ARMA/GARCH: Bollerslev (1986), Hamilton (1994) "Time Series Analysis"
+    Walk-forward testing: Aronson (2006) "Evidence-Based Technical Analysis"
+
+Data Source:
+    Monthly natural gas data from data/Book1.1.xlsx (71 observations, Jan 2020 - Nov 2025)
+    Variables include: Henry Hub spot, coal price, EIA storage, net trade balance
+"""
+
 import pandas as pd
 import numpy as np
 from sklearn.linear_model import LinearRegression
@@ -9,24 +24,38 @@ from arch import arch_model
 import warnings
 warnings.filterwarnings('ignore')
 
+# Configuration
+TARGET_COLUMN = 'NG_Return'               # Dependent variable
+GARCH_SCALE_FACTOR = 100                  # Scale returns for GARCH numerical stability
+RF_N_ESTIMATORS = 100                     # Random Forest: number of trees
+RF_MAX_DEPTH = 5                          # Random Forest: max tree depth
+RF_RANDOM_STATE = 42                      # Random Forest: reproducibility seed
+TS_CV_SPLITS = 5                          # Time-series cross-validation folds
+
 
 class BaseOLSModel:
+    """Base class for OLS regression models on natural gas fundamentals."""
+
     def __init__(self, features):
         self.features = features
         self.model = LinearRegression()
         self.fitted = False
 
     def fit(self, data):
+        """Fit OLS regression model. Returns fitted model instance."""
+        # OLS regression on fundamental factors: Geman (2005) Ch. 8
         X = data[self.features]
-        y = data['NG_Return']
+        y = data[TARGET_COLUMN]
 
         self.model.fit(X, y)
         y_pred = self.model.predict(X)
 
-        # Calculate metrics
+        # R-squared and adjusted R-squared
         self.r2 = r2_score(y, y_pred)
+        assert 0 <= self.r2 <= 1, f"R-squared out of valid range: {self.r2}"
         n = len(y)
         p = len(self.features)
+        # Adjusted R²: penalizes additional regressors
         self.adj_r2 = 1 - (1 - self.r2) * (n - 1) / (n - p - 1)
 
         residuals = y - y_pred
@@ -42,11 +71,13 @@ class BaseOLSModel:
         return self
 
     def predict(self, data):
+        """Generate predictions for new data. Model must be fitted first."""
         if not self.fitted:
             raise ValueError("Model must be fitted before prediction")
         return self.model.predict(data[self.features])
 
     def summary(self):
+        """Print model summary with coefficients and fit statistics."""
         print(f"{self.__class__.__name__} - OLS REGRESSION")
         print(f"Number of features:  {len(self.features)}")
         print(f"R²:                  {self.r2:.4f}")
@@ -55,10 +86,10 @@ class BaseOLSModel:
         print(f"SSR:                 {self.ssr:.4f}")
         print("\nCoefficients:")
         print(self.coefficients.to_string(index=False))
-        
 
 
-class FullOLSModel(BaseOLSModel):# Full OLS with all 23 variables.
+class FullOLSModel(BaseOLSModel):
+    """Full OLS model with all 23 fundamental variables."""
 
     def __init__(self):
         features = [
@@ -73,7 +104,8 @@ class FullOLSModel(BaseOLSModel):# Full OLS with all 23 variables.
         super().__init__(features)
 
 
-class SignificantOLSModel(BaseOLSModel):# OLS with 6 significant variables.
+class SignificantOLSModel(BaseOLSModel):
+    """OLS model with 6 statistically significant variables (p < 0.05)."""
     def __init__(self):
         features = [
             'Coal Price Index',
@@ -86,12 +118,16 @@ class SignificantOLSModel(BaseOLSModel):# OLS with 6 significant variables.
         super().__init__(features)
 
 
-class ARMAModel: # ARMA model for time series forecasting.
+class ARMAModel:
+    """ARMA time series model. Fitted via statsmodels ARIMA with d=0."""
+
     def __init__(self, order=(0,0,0)):
         self.order = order
         self.fitted = False
 
     def fit(self, returns):
+        """Fit ARMA model to return series. Returns fitted model instance."""
+        # ARMA(p,q): Box-Jenkins (1970), Hamilton (1994) Ch. 3
         self.model = ARIMA(returns, order=self.order)
         self.fitted_model = self.model.fit()
 
@@ -104,19 +140,22 @@ class ARMAModel: # ARMA model for time series forecasting.
         return self
 
     def forecast(self, steps=6):
+        """Forecast future returns for the given number of steps."""
         if not self.fitted:
             raise ValueError("Model must be fitted before forecasting")
         return self.fitted_model.forecast(steps=steps)
 
     def summary(self):
-        
+        """Print ARMA model summary statistics."""
         print(f"ARMA{self.order} MODEL")
-        
         print(f"SSR: {self.ssr:.4f}")
         print(f"AIC: {self.aic:.4f}")
         print(f"BIC: {self.bic:.4f}")
-        
-class GARCHModel:# GARCH model for volatility forecasting.
+
+
+class GARCHModel:
+    """GARCH volatility model with AR mean specification."""
+
     def __init__(self, mean_model='AR', lags=1, p=1, q=1):
         self.mean_model = mean_model
         self.lags = lags
@@ -125,7 +164,9 @@ class GARCHModel:# GARCH model for volatility forecasting.
         self.fitted = False
 
     def fit(self, returns, dist='normal'):
-        returns_scaled = returns * 100
+        """Fit GARCH model. Returns are scaled by 100 for numerical stability."""
+        # GARCH(1,1): Bollerslev (1986), sigma_t^2 = omega + alpha*e_{t-1}^2 + beta*sigma_{t-1}^2
+        returns_scaled = returns * GARCH_SCALE_FACTOR
 
         model = arch_model(
             returns_scaled,
@@ -139,38 +180,39 @@ class GARCHModel:# GARCH model for volatility forecasting.
 
         self.fitted_model = model.fit(disp='off')
 
-        residuals = self.fitted_model.resid / 100
+        residuals = self.fitted_model.resid / GARCH_SCALE_FACTOR
         self.ssr = np.sum(residuals ** 2)
 
         self.fitted = True
         return self
 
     def forecast(self, horizon=6):
+        """Forecast mean returns and variance over the given horizon."""
         if not self.fitted:
             raise ValueError("Model must be fitted before forecasting")
 
         forecast = self.fitted_model.forecast(horizon=horizon)
-        mean_forecast = forecast.mean.values[-1, :] / 100
-        variance_forecast = forecast.variance.values[-1, :] / 10000
+        mean_forecast = forecast.mean.values[-1, :] / GARCH_SCALE_FACTOR
+        variance_forecast = forecast.variance.values[-1, :] / (GARCH_SCALE_FACTOR ** 2)
 
         return mean_forecast, variance_forecast
 
     def summary(self):
-        
+        """Print GARCH model summary statistics."""
         print(f"ARMA({self.lags},1)-GARCH({self.p},{self.q}) MODEL")
-        
         print(f"SSR: {self.ssr:.4f}")
-        
 
 
-class MLEnsembleModel:# Machine Learning model using Random Forest.
-    def __init__(self, n_estimators=100, max_depth=5):
+class MLEnsembleModel:
+    """Random Forest ensemble model for natural gas return prediction."""
+
+    def __init__(self, n_estimators=RF_N_ESTIMATORS, max_depth=RF_MAX_DEPTH):
         self.model = RandomForestRegressor(
             n_estimators=n_estimators,
             max_depth=max_depth,
             min_samples_split=5,
             min_samples_leaf=3,
-            random_state=42,
+            random_state=RF_RANDOM_STATE,
             n_jobs=-1
         )
 
@@ -184,13 +226,14 @@ class MLEnsembleModel:# Machine Learning model using Random Forest.
         self.fitted = False
 
     def fit(self, data):
+        """Fit Random Forest with time-series cross-validation."""
         X = data[self.features]
-        y = data['NG_Return']
+        y = data[TARGET_COLUMN]
 
         self.model.fit(X, y)
 
-        # Cross-validation
-        tscv = TimeSeriesSplit(n_splits=5)
+        # Time-series cross-validation to avoid leakage
+        tscv = TimeSeriesSplit(n_splits=TS_CV_SPLITS)
         cv_scores = cross_val_score(
             self.model, X, y,
             cv=tscv,
@@ -216,14 +259,14 @@ class MLEnsembleModel:# Machine Learning model using Random Forest.
         return self
 
     def predict(self, data):
+        """Generate predictions for new data. Model must be fitted first."""
         if not self.fitted:
             raise ValueError("Model must be fitted before prediction")
         return self.model.predict(data[self.features])
 
     def summary(self):
-        
+        """Print Random Forest model summary with feature importances."""
         print("RANDOM FOREST MODEL")
-        
         print(f"In-sample R²:        {self.r2:.4f}")
         print(f"CV R² (mean):        {self.cv_r2_mean:.4f}")
         print(f"CV R² (std):         {self.cv_r2_std:.4f}")
@@ -232,10 +275,10 @@ class MLEnsembleModel:# Machine Learning model using Random Forest.
         print("\nFeature Importance:")
         for _, row in self.feature_importance.iterrows():
             print(f"  {row['Feature']:<30} {row['Importance']:>10.4f}")
-        
 
 
-def compare_all_models(data):# Comprehensive model comparison function.
+def compare_all_models(data):
+    """Compare all models (OLS, ARMA, GARCH, RF) and rank by SSR."""
     print("COMPREHENSIVE MODEL COMPARISON")
     results = []
     fitted_models = {}

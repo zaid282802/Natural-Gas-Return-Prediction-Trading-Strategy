@@ -1,3 +1,14 @@
+"""Natural Gas Return Prediction - Visualization Suite.
+
+Generates six publication-quality charts for the analysis report:
+    1. Equity curve: OLS strategy vs buy-and-hold
+    2. Drawdown timeline comparison
+    3. Factor importance (OLS coefficients)
+    4. Rolling Sharpe ratio evolution
+    5. Prediction accuracy over time
+    6. Factor correlation heatmap
+"""
+
 import sys
 import os
 import numpy as np
@@ -12,18 +23,27 @@ from src.utils import load_data_from_r
 from src.models import SignificantOLSModel
 from src.backtest import WalkForwardBacktest
 
-# Set style
+# Configuration
+DATA_PATH = 'data/Book1.1.xlsx'
+OUTPUT_DIR = 'results/charts'
+CHART_DPI = 300                            # Output resolution
+TRAIN_WINDOW = 36                          # Must match backtest config
+ROLLING_SHARPE_WINDOW = 12                 # 12-month rolling window
+ROLLING_ACCURACY_WINDOW = 6               # 6-month rolling accuracy
+ANNUALIZATION_FACTOR = 12                  # Monthly to annual
+
+# Plot styling
 plt.style.use('seaborn-v0_8-darkgrid')
 sns.set_palette("husl")
 plt.rcParams['figure.figsize'] = (12, 6)
 plt.rcParams['font.size'] = 10
 
 # Create output directory
-os.makedirs('results/charts', exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
-# Chart 1: Equity curve comparison
 def plot_equity_curves(backtest, results):
+    """Chart 1: Equity curve - OLS strategy vs buy-and-hold benchmark."""
     fig, ax = plt.subplots(figsize=(14, 7))
 
     # Calculate returns
@@ -74,13 +94,13 @@ def plot_equity_curves(backtest, results):
             bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
 
     plt.tight_layout()
-    plt.savefig('results/charts/1_equity_curve.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'{OUTPUT_DIR}/1_equity_curve.png', dpi=CHART_DPI, bbox_inches='tight')
     plt.close()
     print("Chart 1 saved")
 
 
-# Chart 2: Drawdown timeline
 def plot_drawdown_timeline(results):
+    """Chart 2: Drawdown timeline for strategy and buy-and-hold."""
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 9), sharex=True)
 
     # Calculate drawdowns for strategy
@@ -115,13 +135,13 @@ def plot_drawdown_timeline(results):
     ax2.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.savefig('results/charts/2_drawdown_timeline.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'{OUTPUT_DIR}/2_drawdown_timeline.png', dpi=CHART_DPI, bbox_inches='tight')
     plt.close()
     print("Chart 2 saved")
 
 
-# Chart 3: Factor importance and coefficients
 def plot_factor_importance(data):
+    """Chart 3: Horizontal bar chart of OLS regression coefficients."""
     # Fit model
     model = SignificantOLSModel()
     model.fit(data)
@@ -172,24 +192,24 @@ def plot_factor_importance(data):
     ax.legend(handles=legend_elements, loc='lower right', fontsize=10)
 
     plt.tight_layout()
-    plt.savefig('results/charts/3_factor_importance.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'{OUTPUT_DIR}/3_factor_importance.png', dpi=CHART_DPI, bbox_inches='tight')
     plt.close()
     print("Chart 3 saved")
 
 
-# Chart 4: Rolling Sharpe ratio evolution
 def plot_rolling_sharpe(results):
+    """Chart 4: Rolling Sharpe ratio with positive/negative shading."""
     fig, ax = plt.subplots(figsize=(14, 6))
 
-    # Calculate 12-month rolling Sharpe
+    # Sharpe (1994): SR = mean(R) / std(R) * sqrt(12), computed on rolling window
     strategy_returns = results['Strategy_Return'].values
     rolling_sharpe = []
     dates_rolling = []
 
-    for i in range(12, len(strategy_returns)):
-        window = strategy_returns[i-12:i]
+    for i in range(ROLLING_SHARPE_WINDOW, len(strategy_returns)):
+        window = strategy_returns[i-ROLLING_SHARPE_WINDOW:i]
         if window.std() > 0:
-            sharpe = window.mean() / window.std() * np.sqrt(12)
+            sharpe = window.mean() / window.std() * np.sqrt(ANNUALIZATION_FACTOR)
         else:
             sharpe = 0
         rolling_sharpe.append(sharpe)
@@ -220,13 +240,13 @@ def plot_rolling_sharpe(results):
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.savefig('results/charts/4_rolling_sharpe.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'{OUTPUT_DIR}/4_rolling_sharpe.png', dpi=CHART_DPI, bbox_inches='tight')
     plt.close()
     print("Chart 4 saved")
 
 
-# Chart 5: Prediction accuracy over time
 def plot_prediction_accuracy(results):
+    """Chart 5: Actual vs predicted returns and rolling directional accuracy."""
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 9), sharex=True)
 
     # Check if predictions are correct
@@ -234,7 +254,7 @@ def plot_prediction_accuracy(results):
                                     np.sign(results['Actual_Return']))
 
     # Calculate rolling accuracy
-    rolling_accuracy = results['Correct_Direction'].rolling(6).mean() * 100
+    rolling_accuracy = results['Correct_Direction'].rolling(ROLLING_ACCURACY_WINDOW).mean() * 100
 
     # Plot 1: Actual vs predicted returns
     ax1.scatter(results['Date'], results['Actual_Return'] * 100,
@@ -264,13 +284,13 @@ def plot_prediction_accuracy(results):
     ax2.set_ylim([0, 100])
 
     plt.tight_layout()
-    plt.savefig('results/charts/5_prediction_accuracy.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'{OUTPUT_DIR}/5_prediction_accuracy.png', dpi=CHART_DPI, bbox_inches='tight')
     plt.close()
     print("Chart 5 saved")
 
 
-# Chart 6: Factor correlation matrix
 def plot_factor_correlation_matrix(data):
+    """Chart 6: Pearson correlation heatmap for the 6 significant factors."""
     # Get significant factors
     model = SignificantOLSModel()
     factors = model.features
@@ -297,24 +317,24 @@ def plot_factor_correlation_matrix(data):
             bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8))
 
     plt.tight_layout()
-    plt.savefig('results/charts/6_factor_correlation.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'{OUTPUT_DIR}/6_factor_correlation.png', dpi=CHART_DPI, bbox_inches='tight')
     plt.close()
     print("Chart 6 saved")
 
 
 def main():
-    # Get script directory
+    """Generate all six charts and save to results/charts/."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
     os.chdir(script_dir)
 
     print("\nGenerating visualizations...")
 
     # Load data
-    data = load_data_from_r('data/Book1.1.xlsx')
+    data = load_data_from_r(DATA_PATH)
 
     # Run backtest
     model = SignificantOLSModel()
-    backtest = WalkForwardBacktest(model, data, train_window=36, expanding=True)
+    backtest = WalkForwardBacktest(model, data, train_window=TRAIN_WINDOW, expanding=True)
     results = backtest.run()
 
     # Generate all charts
@@ -325,6 +345,8 @@ def main():
     plot_prediction_accuracy(results)
     plot_factor_correlation_matrix(data)
 
-    print("\nAll charts saved to results/charts/")
+    print(f"\nAll charts saved to {OUTPUT_DIR}/")
+
+
 if __name__ == "__main__":
     main()

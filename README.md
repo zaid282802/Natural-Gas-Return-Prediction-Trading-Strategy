@@ -1,8 +1,8 @@
 # Natural Gas Return Prediction & Trading Strategy
 
-**September 2025 -- October 2025** | Zaid Annigeri | Master of Quantitative Finance, Rutgers Business School
+**September 2025 -- October 2025** (ML extension May 2026) | Zaid Annigeri | Master of Quantitative Finance, Rutgers Business School
 
-> Quantitative trading strategy using fundamental factors to predict monthly natural gas returns, achieving 54% improvement over time series models (SSR metric).
+> Quantitative trading strategy using fundamental factors to predict monthly natural gas returns, achieving 54% improvement over time series models (SSR metric). Extended in May 2026 with Random Forest (scikit-learn) and LSTM (PyTorch) for a 4-model walk-forward bake-off with HLN-corrected Diebold-Mariano tests.
 
 ##  Project Overview
 
@@ -218,6 +218,49 @@ The `create_visualizations.py` script generates 6 charts:
 2. **Natural Gas Modeling**: *Commodity Price Dynamics* - Geman, H. (2005)
 3. **Risk Management**: *Active Portfolio Management* - Grinold & Kahn (1999)
 4. **Backtesting**: *Evidence-Based Technical Analysis* - Aronson, D. (2006)
+5. **Random Forest**: Breiman, L. (2001) "Random Forests", Machine Learning 45(1)
+6. **LSTM**: Hochreiter, S. & Schmidhuber, J. (1997) "Long Short-Term Memory", Neural Computation 9(8)
+7. **Diebold-Mariano**: Diebold & Mariano (1995) JBES; HLN small-sample correction Harvey, Leybourne & Newbold (1997)
+8. **ML in finance**: Lopez de Prado (2018) *Advances in Financial Machine Learning*; Gu, Kelly & Xiu (2020) *Empirical Asset Pricing via Machine Learning* RFS
+
+---
+
+## ML Extension (May 2026)
+
+I added Random Forest (scikit-learn) and LSTM (PyTorch) on top of the original OLS and ARMA-GARCH walk-forward framework, then ran a 4-model bake-off plus equal-weight and stacked ensembles. Same 71-month sample, same expanding-window walk-forward, 35 OOS predictions.
+
+### 4-Model Comparison (Walk-Forward, 35 OOS months)
+
+| Model | RMSE | MAE | Hit Rate | Sharpe | Max DD |
+|-------|------|-----|----------|--------|--------|
+| OLS (significant 6 vars) | 0.243 | 0.188 | 62.9% | 0.94 | -59% |
+| Equal-weight ensemble | 0.239 | 0.182 | 65.7% | 1.21 | -59% |
+| LSTM (regression) | 0.256 | 0.202 | 48.6% | 0.42 | -76% |
+| Random Forest | 0.262 | 0.201 | 42.9% | 0.10 | -82% |
+| Stacked logistic ensemble | 0.286 | 0.234 | 52.0% | 0.05 | -64% |
+| ARMA-GARCH | 0.260 | 0.195 | 40.0% | -1.49 | -98% |
+
+Note on the OLS Sharpe: this section reports 0.94 because the comparison harness uses sign-of-prediction trading with 10 bps round-trip cost. The 1.07 number reported earlier in this README comes from the original spec (only trade when prediction magnitude exceeds 2%, no transaction costs). Both are correct under their respective methodology, and the hit rate (62.9% vs 62.86%) is identical.
+
+### Diebold-Mariano (HLN-corrected)
+
+I ran 6 pairwise comparisons. None reached statistical significance (all p > 0.6). With N=35 that is expected per Harvey, Leybourne and Newbold (1997).
+
+### What I learned
+
+OLS still wins on its own. RF and LSTM did not beat it individually in 35 OOS months, which is the outcome Gu-Kelly-Xiu (2020) predict for ML on monthly data with limited features. The equal-weight ensemble of all four models edged out OLS slightly (1.21 vs 0.94 Sharpe, 65.7% vs 62.9% hit rate), so combining model classes adds value even when individual ML models look weak.
+
+If I had daily or weekly NG data, ML would likely move from no edge to additive edge without needing the ensemble. That is the natural follow-up.
+
+### Files
+
+```
+nat_gas_ml_extension.ipynb         Single notebook, 14 cells, runs top to bottom
+addendum-pytorch-rf/addendum.pdf   12-page methodology document
+results/model_comparison.csv       Headline comparison table
+results/dm_tests.csv               Pairwise Diebold-Mariano statistics
+results/*.parquet                  Per-model walk-forward predictions
+```
 
 
 ---

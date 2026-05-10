@@ -1,0 +1,7 @@
+A,B,DM,p
+ols_pred,garch_pred,-0.4467,0.658
+ols_pred,rf_pred,-0.4911,0.6265
+ols_pred,lstm_reg,-0.38,0.7063
+garch_pred,rf_pred,-0.4325,0.6681
+garch_pred,lstm_reg,0.5539,0.5833
+rf_pred,lstm_reg,0.7075,0.4841

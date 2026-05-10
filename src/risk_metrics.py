@@ -1,146 +1,173 @@
+"""Natural Gas Return Prediction - Risk and Performance Metrics.
+
+Calculates standard portfolio performance metrics.
+
+Methodology:
+    Sharpe ratio: Sharpe (1994) "The Sharpe Ratio"
+    Sortino ratio: Sortino & Price (1994)
+    Maximum drawdown: Standard peak-to-trough calculation
+"""
+
 import pandas as pd
 import numpy as np
 from scipy import stats
 from typing import Dict, Optional
 
+# Configuration
+ANNUALIZATION_FACTOR = 12                 # Monthly to annual conversion
+DEFAULT_CONFIDENCE = 0.95                 # VaR/CVaR confidence level
+CALMAR_DRAWDOWN_FLOOR = 0.0001           # Minimum drawdown to avoid div/zero
+CALMAR_CAP = 1000                         # Cap Calmar ratio for display
+DEFAULT_TAIL_PERCENTILE = 95              # Percentile for tail ratio
 
-class RiskMetrics:# To calculate risk metrics for trading strategies.
-    
+
+class RiskMetrics:
+    """Risk metrics for evaluating trading strategy downside exposure."""
+
     @staticmethod
-    def sharpe_ratio(returns, risk_free_rate=0, periods_per_year=12):
+    def sharpe_ratio(returns, risk_free_rate=0, periods_per_year=ANNUALIZATION_FACTOR):
+        """Annualized Sharpe ratio: (mean_return - rf) / std_return * sqrt(12)."""
+        # Sharpe (1994): SR = (R_p - R_f) / sigma_p * sqrt(12)
         excess_returns = returns - risk_free_rate
         return excess_returns.mean() / excess_returns.std() * np.sqrt(periods_per_year)
-    
+
     @staticmethod
-    def sortino_ratio(returns, target=0, periods_per_year=12): #Downside risk-adjusted return.
+    def sortino_ratio(returns, target=0, periods_per_year=ANNUALIZATION_FACTOR):
+        """Sortino ratio: excess return over downside deviation only."""
+        # Sortino & Price (1994): uses downside deviation instead of total volatility
         excess = returns - target
         downside = excess[excess < 0]
-        
+
         if len(downside) == 0:
             return np.inf  # No downside = infinite Sortino
-        
+
         downside_std = downside.std()
         return excess.mean() / downside_std * np.sqrt(periods_per_year)
-    
-    @staticmethod
-    def calmar_ratio(returns, max_drawdown, periods_per_year=12): # Return per unit of max drawdown. Returns 0 if drawdown is effectively zero (< 0.01%)
-                                                                    #to avoid displaying infinity or huge numbers.
 
+    @staticmethod
+    def calmar_ratio(returns, max_drawdown, periods_per_year=ANNUALIZATION_FACTOR):
+        """Return per unit of max drawdown. Returns 0 if drawdown < 0.01%."""
         # Handle zero or near-zero drawdown
-        if abs(max_drawdown) < 0.0001:  # Less than 0.01% drawdown
-            return 0  # Better than returning inf for display purposes
+        if abs(max_drawdown) < CALMAR_DRAWDOWN_FLOOR:
+            return 0
 
         annualized_return = returns.mean() * periods_per_year
         calmar = annualized_return / abs(max_drawdown)
 
-        # Cap at reasonable maximum to avoid display issues
-        return min(calmar, 1000)
+        return min(calmar, CALMAR_CAP)
 
     @staticmethod
-    def value_at_risk(returns, confidence=0.95): # Value at Risk (VaR) calculation.
-        
-        return np.percentile(returns, (1-confidence)*100)
-    
+    def value_at_risk(returns, confidence=DEFAULT_CONFIDENCE):
+        """Historical VaR at given confidence level."""
+        return np.percentile(returns, (1 - confidence) * 100)
+
     @staticmethod
-    def conditional_var(returns, confidence=0.95): #Conditional VaR (CVaR / Expected Shortfall).
+    def conditional_var(returns, confidence=DEFAULT_CONFIDENCE):
+        """CVaR (Expected Shortfall): average loss beyond VaR threshold."""
         var = RiskMetrics.value_at_risk(returns, confidence)
         return returns[returns <= var].mean()
-    
+
     @staticmethod
     def max_drawdown(returns):
+        """Maximum peak-to-trough drawdown from cumulative return series."""
         cumulative = (1 + returns).cumprod()
         running_max = cumulative.expanding().max()
         drawdown = (cumulative - running_max) / running_max
         return drawdown.min()
-    
+
     @staticmethod
-    def max_drawdown_duration(returns): # Duration of the worst drawdown.
+    def max_drawdown_duration(returns):
+        """Duration (in periods) of the longest drawdown episode."""
         cumulative = (1 + returns).cumprod()
         running_max = cumulative.expanding().max()
         drawdown = (cumulative - running_max) / running_max
-        
-        # Find periods in drawdown
+
         in_drawdown = drawdown < 0
-        
-        # Calculate duration
+
         max_duration = 0
         current_duration = 0
-        
+
         for is_dd in in_drawdown:
             if is_dd:
                 current_duration += 1
                 max_duration = max(max_duration, current_duration)
             else:
                 current_duration = 0
-        
+
         return max_duration
 
 
-class PerformanceMetrics:    
+class PerformanceMetrics:
+    """Trading performance statistics (win rate, profit factor, expectancy)."""
+
     @staticmethod
-    def win_rate(returns): # Win rate calculation.
+    def win_rate(returns):
+        """Fraction of periods with positive returns."""
         return (returns > 0).sum() / len(returns)
-    
+
     @staticmethod
-    def profit_factor(returns):# Profit factor calculation.
+    def profit_factor(returns):
+        """Ratio of gross profits to gross losses."""
         wins = returns[returns > 0].sum()
         losses = abs(returns[returns < 0].sum())
-        
+
         if losses == 0:
             return np.inf
-        
+
         return wins / losses
-    
+
     @staticmethod
-    def average_win_loss_ratio(returns): # Average win/loss ratio calculation.
+    def average_win_loss_ratio(returns):
+        """Average winning trade divided by average losing trade."""
         wins = returns[returns > 0]
         losses = returns[returns < 0]
-        
+
         if len(losses) == 0:
             return np.inf
-        
+
         avg_win = wins.mean() if len(wins) > 0 else 0
         avg_loss = abs(losses.mean())
-        
+
         return avg_win / avg_loss
-    
+
     @staticmethod
-    def expectancy(returns): # Expectancy calculation.
+    def expectancy(returns):
+        """Expected value per trade: P(win)*avg_win - P(loss)*avg_loss."""
         win_rate = PerformanceMetrics.win_rate(returns)
-        
+
         wins = returns[returns > 0]
         losses = returns[returns < 0]
-        
+
         avg_win = wins.mean() if len(wins) > 0 else 0
         avg_loss = abs(losses.mean()) if len(losses) > 0 else 0
-        
-        return (win_rate * avg_win) - ((1 - win_rate) * avg_loss)
-    
-    @staticmethod
-    def tail_ratio(returns, percentile=95):# Tail ratio calculation.Want tail_ratio > 1.0 (big winners, small losers)
 
-        right_tail = abs(np.percentile(returns, percentile)) # magnitude of upper tail (big positive returns)
-        left_tail = abs(np.percentile(returns, 100 - percentile))# magnitude of lower tail (big negative returns)
+        return (win_rate * avg_win) - ((1 - win_rate) * avg_loss)
+
+    @staticmethod
+    def tail_ratio(returns, percentile=DEFAULT_TAIL_PERCENTILE):
+        """Ratio of right-tail magnitude to left-tail magnitude. >1.0 is favorable."""
+        right_tail = abs(np.percentile(returns, percentile))
+        left_tail = abs(np.percentile(returns, 100 - percentile))
 
         if left_tail == 0:
             return np.inf
-        
-        return right_tail / left_tail  #> 1.0 = Bigger wins than losses (positive skew)
-                                       # < 1.0 = Bigger losses than wins (negative skew)
+
+        return right_tail / left_tail
 
 
 class ComprehensiveAnalysis:
+    """Full performance report combining return, risk, and trading metrics."""
 
     @staticmethod
     def print_report(returns):
-
+        """Print comprehensive performance report for a return series."""
         print("PERFORMANCE REPORT")
-        
+
         # Calculate return metrics
         cumulative = (1 + returns).cumprod().iloc[-1] - 1
         n_periods = len(returns)
-        annualized = (1 + cumulative) ** (12 / n_periods) - 1
-        volatility = returns.std() * np.sqrt(12)
+        annualized = (1 + cumulative) ** (ANNUALIZATION_FACTOR / n_periods) - 1
+        volatility = returns.std() * np.sqrt(ANNUALIZATION_FACTOR)
 
         print("\n RETURN METRICS:")
         print(f"  Total Return:           {cumulative*100:>10.2f}%")

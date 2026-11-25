@@ -13,7 +13,7 @@ Comparison of **fundamental factor analysis** (OLS regression) versus **time ser
 - **Fundamental factors outperform time series by 54%** (SSR: 2.57 vs 5.62)
 - **6 significant variables** explain 36% of variance (parsimonious model)
 - **Walk-forward backtest**: Sharpe Ratio 1.07, Win Rate 63%
-- **Expanding window backtest**: No look-ahead bias
+- **Expanding window backtest**: the model is refit only on past months, but the six fundamentals are same-month values (see [Timing check](#timing-check-november-2026))
 
 ---
 
@@ -251,6 +251,21 @@ I ran 6 pairwise comparisons. None reached statistical significance (all p > 0.6
 OLS still wins on its own. RF and LSTM did not beat it individually in 35 OOS months, which is the outcome Gu-Kelly-Xiu (2020) predict for ML on monthly data with limited features. The equal-weight ensemble of all four models edged out OLS slightly (1.21 vs 0.94 Sharpe, 65.7% vs 62.9% hit rate), so combining model classes adds value even when individual ML models look weak.
 
 If I had daily or weekly NG data, ML would likely move from no edge to additive edge without needing the ensemble. That is the natural follow-up.
+
+## Timing check (November 2026)
+
+The six fundamental features are read from the same monthly row as `NG_Return`, and `NG_Return` is the return realised during that month: its correlation with the same month's log price change is 0.89, and with the next month's it is -0.03. The report's equation writes the features at t-1, but no code in this repo applies that lag, so every walk-forward result above uses same-month information.
+
+`robustness/lag_check.py` re-runs the OLS walk-forward on the same harness with each fundamental lagged one month:
+
+| OLS walk-forward | OOS months | Hit rate | Sharpe | Max DD |
+|---|---|---|---|---|
+| Features as stored (same month) | 35 | 62.9% | 0.94 | -59.1% |
+| Features lagged one month | 34 | 50.0% | 0.30 | -68.7% |
+
+With the lag, the hit rate falls to chance and most of the edge goes. The Random Forest, LSTM and ensembles were not re-run with lagged fundamentals, so their numbers above carry the same issue. The addendum mentions a unit test for this kind of leakage; no such test exists in this repo.
+
+Run from the repo root: `python robustness/lag_check.py` (saved output: `robustness/lag_check_output.txt`).
 
 ### Files
 

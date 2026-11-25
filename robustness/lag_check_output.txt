@@ -1,0 +1,51 @@
+Loaded Book1.1.xlsx: shape=(71, 25), range=2020-01-31 to 2025-11-30
+
+==============================================================================
+1. TIMING CHECK: what is NG_Return[t] relative to price and features
+==============================================================================
+corr(NG_Return[t], log(P[t]/P[t-1]))   = 0.8871
+corr(NG_Return[t], log(P[t+1]/P[t]))   = -0.0255
+corr(NG_Return[t], pct_change P[t])    = 0.8814
+corr(NG_Return[t], pct_change P[t+1])  = -0.0548
+
+Verdict: NG_Return[t] is the CONTEMPORANEOUS (return realized BY month t, same row as price P[t]).
+The 6 fundamental feature columns (Coal Price Index, Carbon EUA, EIA
+Storage Change, Storage vs 5yr Avg, Net Trade Balance, HenryHub Spot)
+are read from the SAME row t as NG_Return[t] in both src/models.py
+(BaseOLSModel.fit: X = data[self.features]; y = data[TARGET_COLUMN])
+and in nat_gas_ml_extension.ipynb cell 5 (SignificantOLSModel().fit(train)
+where train/test are row-aligned slices of the same raw dataframe).
+No .shift() is applied to any of the 6 fundamental columns anywhere in
+src/models.py, src/backtest.py, src/utils.py, or notebook cells 1-13.
+
+==============================================================================
+2. IN-SAMPLE OLS (full sample, 6 variables): as-is vs lagged 1 month
+==============================================================================
+As-is   (contemporaneous features): n=71, R^2=0.3562, Adj R^2=0.2959, SSR=3.8002
+Lagged 1m (features[t-1] -> NG_Return[t]): n=70, R^2=0.1976, Adj R^2=0.1212, SSR=4.6950
+
+==============================================================================
+3. WALK-FORWARD (expanding 36-month window, 35 OOS months, 10bps, sign-of-forecast): as-is vs lagged 1 month
+==============================================================================
+NOTE ON HARNESS: nat_gas_ml_extension.ipynb cell 5 (which produced the
+official results/ols_predictions.parquet and the 0.94 Sharpe / 62.9% hit
+in results/model_comparison.csv) uses an EXPANDING 36-month window with
+range(36, len(raw)) -- NOT the 5-fold TimeSeriesSplit that the addendum's
+prose claims ('Same walk-forward partition: 5 contiguous folds'). Only
+the Random Forest (cell 9) and LSTM (cell 11) actually use
+TimeSeriesSplit(n_splits=5). This script reproduces the ACTUAL OLS code
+path (expanding window) which is what generated
+results/model_comparison.csv.
+
+As-is    (contemporaneous features): n_OOS=35, RMSE=0.2431, MAE=0.1879, Hit=62.9%, Sharpe=0.9376, MaxDD=-59.1%
+Lagged 1m (features[t-1])          : n_OOS=34, RMSE=0.3076, MAE=0.2547, Hit=50.0%, Sharpe=0.3021, MaxDD=-68.7%
+
+==============================================================================
+SUMMARY TABLE
+==============================================================================
+Metric                         As-is     Lagged 1m
+In-sample R^2                 0.3562        0.1976
+In-sample Adj R^2             0.2959        0.1212
+WF Sharpe                     0.9376        0.3021
+WF Hit rate (%)                 62.9          50.0
+WF Max drawdown (%)            -59.1         -68.7
